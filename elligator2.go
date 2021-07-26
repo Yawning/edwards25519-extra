@@ -89,34 +89,6 @@ func feIsZero(fe *field.Element) int {
 	return fe.Equal(constZero)
 }
 
-func ell2EdwardsFlavor(r *field.Element) *edwards25519.Point {
-	u, v := ell2MontgomeryFlavor(r)
-
-	// Per RFC 7748: (x, y) = (sqrt(-486664)*u/v, (u-1)/(u+1))
-
-	x := new(field.Element).Invert(v)
-	x.Multiply(x, u)
-	x.Multiply(x, constMONTGOMERY_SQRT_NEG_A_PLUS_TWO)
-
-	uMinusOne := new(field.Element).Subtract(u, constOne)
-	uPlusOne := new(field.Element).Add(u, constOne)
-	uPlusOneIsZero := feIsZero(uPlusOne)
-
-	uPlusOne.Invert(uPlusOne)
-	y := new(field.Element).Multiply(uMinusOne, uPlusOne)
-
-	// This mapping is undefined when t == 0 or s == -1, i.e., when the
-	// denominator of either of the above rational functions is zero.
-	// Implementations MUST detect exceptional cases and return the value
-	// (v, w) = (0, 1), which is the identity point on all twisted Edwards
-	// curves.
-	resultUndefined := feIsZero(v) | uPlusOneIsZero
-	x.Select(constZero, x, resultUndefined)
-	y.Select(constOne, y, resultUndefined)
-
-	return newEdwardsFromXY(x, y)
-}
-
 func newEdwardsFromXY(x, y *field.Element) *edwards25519.Point {
 	Z := new(field.Element).One()
 	T := new(field.Element).Multiply(x, y)
@@ -128,7 +100,11 @@ func newEdwardsFromXY(x, y *field.Element) *edwards25519.Point {
 	return p
 }
 
-func ell2MontgomeryFlavor(r *field.Element) (*field.Element, *field.Element) {
+func ell2EdwardsFlavor(r *field.Element) *edwards25519.Point {
+	return ell2MontgomeryFlavor(r).ToEdwardsPoint()
+}
+
+func ell2MontgomeryFlavor(r *field.Element) *montgomeryPoint {
 	// This is based off the public domain python implementation by
 	// Loup Vaillant, taken from the Monocypher package
 	// (tests/gen/elligator.py).
@@ -180,5 +156,8 @@ func ell2MontgomeryFlavor(r *field.Element) (*field.Element, *field.Element) {
 	negV := new(field.Element).Negate(v)
 	v.Select(negV, v, isSquare^v.IsNegative())
 
-	return u, v
+	return &montgomeryPoint{
+		u: u,
+		v: v,
+	}
 }

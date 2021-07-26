@@ -31,65 +31,53 @@
 package h2c
 
 import (
-	"encoding/hex"
-	"fmt"
 	"testing"
 
 	"filippo.io/edwards25519"
 	"filippo.io/edwards25519/field"
 )
 
+func (v *montgomeryPoint) Equal(other *montgomeryPoint) bool {
+	return v.u.Equal(other.u) == 1 && v.v.Equal(other.v) == 1
+}
+
+func (v *montgomeryPoint) Bytes() []byte {
+	return v.u.Bytes()
+}
+
 type hashToCurveTestVector struct {
 	msg  string
 	x, y string
 }
 
-func (vec *hashToCurveTestVector) ToCoordinates() (*field.Element, *field.Element, error) {
-	x, err := hex.DecodeString(vec.x)
-	if err != nil {
-		return nil, nil, fmt.Errorf("h2c: failed to deserialize P.x: %w", err)
-	}
-	y, err := hex.DecodeString(vec.y)
-	if err != nil {
-		return nil, nil, fmt.Errorf("h2c: failed to deserialize P.y: %w", err)
-	}
-
-	// The IETF test vectors provide all coordinates in big-endian byte order.
-	x = reversedByteSlice(x)
-	y = reversedByteSlice(y)
-
+func (vec *hashToCurveTestVector) ToCoordinates(t *testing.T) (*field.Element, *field.Element) {
 	// Generate a point from the test vector x and y-coordinates.
-	feX, err := new(field.Element).SetBytes(x)
-	if err != nil {
-		return nil, nil, fmt.Errorf("h2c: failed to deserialize x: %w", err)
-	}
-	feY, err := new(field.Element).SetBytes(y)
-	if err != nil {
-		return nil, nil, fmt.Errorf("h2c: failed to deserialize y: %w", err)
-	}
+	feX := mustUnhexElementIETF(t, vec.x)
+	feY := mustUnhexElementIETF(t, vec.y)
 
-	return feX, feY, nil
+	return feX, feY
 }
 
-func (vec *hashToCurveTestVector) ToEdwardsPoint() (*edwards25519.Point, error) {
-	feX, feY, err := vec.ToCoordinates()
-	if err != nil {
-		return nil, err
-	}
+func (vec *hashToCurveTestVector) ToEdwardsPoint(t *testing.T) *edwards25519.Point {
+	feX, feY := vec.ToCoordinates(t)
+	return newEdwardsFromXY(feX, feY)
+}
 
-	return newEdwardsFromXY(feX, feY), nil
+func (vec *hashToCurveTestVector) ToMontgomeryPoint(t *testing.T) *montgomeryPoint {
+	feX, feY := vec.ToCoordinates(t)
+	return &montgomeryPoint{feX, feY}
 }
 
 func TestHashToCurve(t *testing.T) {
 	t.Run("edwards25519", func(t *testing.T) {
 		checkEdwards := func(t *testing.T, dst []byte, vecs []hashToCurveTestVector, isRO bool) {
 			for i, vec := range vecs {
-				expected, err := vec.ToEdwardsPoint()
-				if err != nil {
-					t.Fatalf("failed to deserialize test vector[%d]: %v", i, err)
-				}
+				expected := vec.ToEdwardsPoint(t)
 
-				var p *edwards25519.Point
+				var (
+					p   *edwards25519.Point
+					err error
+				)
 				if isRO {
 					p, err = Edwards25519_XMD_SHA512_ELL2_RO(dst, []byte(vec.msg))
 				} else {
@@ -171,4 +159,112 @@ func TestHashToCurve(t *testing.T) {
 			checkEdwards(t, dst, vecs, false)
 		})
 	})
+
+	t.Run("curve25519", func(t *testing.T) {
+		checkMontgomery := func(t *testing.T, dst []byte, vecs []hashToCurveTestVector, isRO bool) {
+			for i, vec := range vecs {
+				expected := vec.ToMontgomeryPoint(t)
+
+				var (
+					u, v *field.Element
+					err  error
+				)
+				if isRO {
+					u, v, err = Curve25519_XMD_SHA512_ELL2_RO(dst, []byte(vec.msg))
+				} else {
+					u, v, err = Curve25519_XMD_SHA512_ELL2_NU(dst, []byte(vec.msg))
+				}
+				if err != nil {
+					t.Fatalf("h2c: failed to generate point[%d]: %v", i, err)
+				}
+				p := &montgomeryPoint{u, v}
+
+				if !expected.Equal(p) {
+					t.Logf("u: %x", p.u.Bytes())
+					t.Logf("v: %x", p.v.Bytes())
+					t.Fatalf("h2c: point[%d] mismatch (Got: '%x')", i, p.Bytes())
+				}
+			}
+		}
+
+		t.Run("XMD:SHA512_ELL2_RO_", func(t *testing.T) {
+			dst := []byte("QUUX-V01-CS02-with-curve25519_XMD:SHA-512_ELL2_RO_")
+			vecs := []hashToCurveTestVector{
+				{
+					msg: "",
+					x:   "2de3780abb67e861289f5749d16d3e217ffa722192d16bbd9d1bfb9d112b98c0",
+					y:   "3b5dc2a498941a1033d176567d457845637554a2fe7a3507d21abd1c1bd6e878",
+				},
+				{
+					msg: "abc",
+					x:   "2b4419f1f2d48f5872de692b0aca72cc7b0a60915dd70bde432e826b6abc526d",
+					y:   "1b8235f255a268f0a6fa8763e97eb3d22d149343d495da1160eff9703f2d07dd",
+				},
+				{
+					msg: "abcdef0123456789",
+					x:   "68ca1ea5a6acf4e9956daa101709b1eee6c1bb0df1de3b90d4602382a104c036",
+					y:   "2a375b656207123d10766e68b938b1812a4a6625ff83cb8d5e86f58a4be08353",
+				},
+				{
+					msg: "q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq",
+					x:   "096e9c8bae6c06b554c1ee69383bb0e82267e064236b3a30608d4ed20b73ac5a",
+					y:   "1eb5a62612cafb32b16c3329794645b5b948d9f8ffe501d4e26b073fef6de355",
+				},
+				{
+					msg: "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					x:   "1bc61845a138e912f047b5e70ba9606ba2a447a4dade024c8ef3dd42b7bbc5fe",
+					y:   "623d05e47b70e25f7f1d51dda6d7c23c9a18ce015fe3548df596ea9e38c69bf1",
+				},
+			}
+
+			checkMontgomery(t, dst, vecs, true)
+		})
+		t.Run("XMD:SHA512_ELL2_NU_", func(t *testing.T) {
+			dst := []byte("QUUX-V01-CS02-with-curve25519_XMD:SHA-512_ELL2_NU_")
+			vecs := []hashToCurveTestVector{
+				{
+					msg: "",
+					x:   "1bb913f0c9daefa0b3375378ffa534bda5526c97391952a7789eb976edfe4d08",
+					y:   "4548368f4f983243e747b62a600840ae7c1dab5c723991f85d3a9768479f3ec4",
+				},
+
+				{
+					msg: "abc",
+					x:   "7c22950b7d900fa866334262fcaea47a441a578df43b894b4625c9b450f9a026",
+					y:   "5547bc00e4c09685dcbc6cb6765288b386d8bdcb595fa5a6e3969e08097f0541",
+				},
+				{
+					msg: "abcdef0123456789",
+					x:   "31ad08a8b0deeb2a4d8b0206ca25f567ab4e042746f792f4b7973f3ae2096c52",
+					y:   "405070c28e78b4fa269427c82827261991b9718bd6c6e95d627d701a53c30db1",
+				},
+				{
+					msg: "q128_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq",
+					x:   "027877759d155b1997d0d84683a313eb78bdb493271d935b622900459d52ceaa",
+					y:   "54d691731a53baa30707f4a87121d5169fb5d587d70fb0292b5830dedbec4c18",
+				},
+				{
+					msg: "a512_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					x:   "5fd892c0958d1a75f54c3182a18d286efab784e774d1e017ba2fb252998b5dc1",
+					y:   "750af3c66101737423a4519ac792fb93337bd74ee751f19da4cf1e94f4d6d0b8",
+				},
+			}
+
+			checkMontgomery(t, dst, vecs, false)
+		})
+	})
+}
+
+func mustUnhexElementIETF(t *testing.T, x string) *field.Element {
+	b := mustUnhex(t, x)
+
+	// The IETF test vectors provide all coordinates in big-endian byte order.
+	b = reversedByteSlice(b)
+
+	fe, err := new(field.Element).SetBytes(b)
+	if err != nil {
+		t.Fatalf("failed to parse fe hex: %v", err)
+	}
+
+	return fe
 }

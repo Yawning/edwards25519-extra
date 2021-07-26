@@ -61,6 +61,18 @@ func Edwards25519_XMD_SHA512_ELL2_NU(domainSeparator, message []byte) (*edwards2
 	return Edwards25519_XMD_ELL2_NU(crypto.SHA512, domainSeparator, message)
 }
 
+// Curve25519_XMD_SHA512_ELL2_RO implements the curve25519_XMD:SHA-512_ELL2_RO_
+// suite.
+func Curve25519_XMD_SHA512_ELL2_RO(domainSeparator, message []byte) (*field.Element, *field.Element, error) {
+	return Curve25519_XMD_ELL2_RO(crypto.SHA512, domainSeparator, message)
+}
+
+// Curve25519_XMD_SHA512_ELL2_NU implements the curve25519_XMD:SHA-512_ELL2_NU_
+// suite.
+func Curve25519_XMD_SHA512_ELL2_NU(domainSeparator, message []byte) (*field.Element, *field.Element, error) {
+	return Curve25519_XMD_ELL2_NU(crypto.SHA512, domainSeparator, message)
+}
+
 // Edwards25519_XMD_ELL2_RO implements a generic edwards25519 random oracle suite
 // using `expand_message_xmd`.
 func Edwards25519_XMD_ELL2_RO(hFunc crypto.Hash, domainSeparator, message []byte) (*edwards25519.Point, error) {
@@ -68,7 +80,7 @@ func Edwards25519_XMD_ELL2_RO(hFunc crypto.Hash, domainSeparator, message []byte
 	if err := ExpandMessageXMD(uniformBytes[:], hFunc, domainSeparator, message); err != nil {
 		return nil, fmt.Errorf("h2c: failed to expand message: %w", err)
 	}
-	return hashToCurve(&uniformBytes), nil
+	return hashToCurveEdwards(&uniformBytes), nil
 }
 
 // Edwards25519_XMD_ELL2_NU implements a generic edwards25519 nonuniform suite
@@ -78,7 +90,7 @@ func Edwards25519_XMD_ELL2_NU(hFunc crypto.Hash, domainSeparator, message []byte
 	if err := ExpandMessageXMD(uniformBytes[:], hFunc, domainSeparator, message); err != nil {
 		return nil, fmt.Errorf("h2c: failed to expand message: %w", err)
 	}
-	return encodeToCurve(&uniformBytes), nil
+	return encodeToCurveEdwards(&uniformBytes), nil
 }
 
 // Edwards25519_XOF_ELL2_RO implements a generic edwards25519 random oracle suite
@@ -88,7 +100,7 @@ func Edwards25519_XOF_ELL2_RO(xofFunc sha3.ShakeHash, domainSeparator, message [
 	if err := ExpandMessageXOF(uniformBytes[:], xofFunc, domainSeparator, message); err != nil {
 		return nil, fmt.Errorf("h2c: failed to expand message: %w", err)
 	}
-	return hashToCurve(&uniformBytes), nil
+	return hashToCurveEdwards(&uniformBytes), nil
 }
 
 // Edwards25519_XOF_ELL2_NU implements a generic edwards25519 nonuniform suite
@@ -98,10 +110,54 @@ func Edwards25519_XOF_ELL2_NU(xofFunc sha3.ShakeHash, domainSeparator, message [
 	if err := ExpandMessageXOF(uniformBytes[:], xofFunc, domainSeparator, message); err != nil {
 		return nil, fmt.Errorf("h2c: failed to expand message: %w", err)
 	}
-	return encodeToCurve(&uniformBytes), nil
+	return encodeToCurveEdwards(&uniformBytes), nil
 }
 
-func hashToCurve(uniformBytes *[hashToCurveSize]byte) *edwards25519.Point {
+// Curve25519_XMD_ELL2_RO implements a generic curve25519 random oracle suite
+// using `expand_message_xmd`, returning the u and v-coordinates.
+func Curve25519_XMD_ELL2_RO(hFunc crypto.Hash, domainSeparator, message []byte) (*field.Element, *field.Element, error) {
+	var uniformBytes [hashToCurveSize]byte
+	if err := ExpandMessageXMD(uniformBytes[:], hFunc, domainSeparator, message); err != nil {
+		return nil, nil, fmt.Errorf("h2c: failed to expand message: %w", err)
+	}
+	p := hashToCurveMontgomery(&uniformBytes)
+	return p.u, p.v, nil
+}
+
+// Curve25519_XMD_ELL2_NU implements a generic curve25519 nonuniform suite
+// using `expand_messsage_xmd`, returning the u and v-coordiantes.
+func Curve25519_XMD_ELL2_NU(hFunc crypto.Hash, domainSeparator, message []byte) (*field.Element, *field.Element, error) {
+	var uniformBytes [encodeToCurveSize]byte
+	if err := ExpandMessageXMD(uniformBytes[:], hFunc, domainSeparator, message); err != nil {
+		return nil, nil, fmt.Errorf("h2c: failed to expand message: %w", err)
+	}
+	p := encodeToCurveMontgomery(&uniformBytes)
+	return p.u, p.v, nil
+}
+
+// Curve25519_XOF_ELL2_RO implements a generic curve25519 random oracle suite
+// using `expand_message_xof`, returning the u and v-coordinates.
+func Curve25519_XOF_ELL2_RO(xofFunc sha3.ShakeHash, domainSeparator, message []byte) (*field.Element, *field.Element, error) {
+	var uniformBytes [hashToCurveSize]byte
+	if err := ExpandMessageXOF(uniformBytes[:], xofFunc, domainSeparator, message); err != nil {
+		return nil, nil, fmt.Errorf("h2c: failed to expand message: %w", err)
+	}
+	p := hashToCurveMontgomery(&uniformBytes)
+	return p.u, p.v, nil
+}
+
+// Curve5519_XOF_ELL2_NU implements a generic curve25519 nonuniform suite
+// using `expand_messsage_xof`, returning the u and v-coordinates.
+func Curve25519_XOF_ELL2_NU(xofFunc sha3.ShakeHash, domainSeparator, message []byte) (*field.Element, *field.Element, error) {
+	var uniformBytes [encodeToCurveSize]byte
+	if err := ExpandMessageXOF(uniformBytes[:], xofFunc, domainSeparator, message); err != nil {
+		return nil, nil, fmt.Errorf("h2c: failed to expand message: %w", err)
+	}
+	p := encodeToCurveMontgomery(&uniformBytes)
+	return p.u, p.v, nil
+}
+
+func hashToCurveEdwards(uniformBytes *[hashToCurveSize]byte) *edwards25519.Point {
 	fe0 := uniformToField25519(uniformBytes[:ell])
 	fe1 := uniformToField25519(uniformBytes[ell:])
 
@@ -112,11 +168,22 @@ func hashToCurve(uniformBytes *[hashToCurveSize]byte) *edwards25519.Point {
 	return p.MultByCofactor(p)
 }
 
-func encodeToCurve(uniformBytes *[encodeToCurveSize]byte) *edwards25519.Point {
+func encodeToCurveEdwards(uniformBytes *[encodeToCurveSize]byte) *edwards25519.Point {
 	fe := uniformToField25519(uniformBytes[:])
+
 	Q := ell2EdwardsFlavor(fe)
 
 	return new(edwards25519.Point).MultByCofactor(Q)
+}
+
+func hashToCurveMontgomery(uniformBytes *[hashToCurveSize]byte) *montgomeryPoint {
+	p := hashToCurveEdwards(uniformBytes)
+	return newMontgomeryPointFromEdwards(p)
+}
+
+func encodeToCurveMontgomery(uniformBytes *[encodeToCurveSize]byte) *montgomeryPoint {
+	p := encodeToCurveEdwards(uniformBytes)
+	return newMontgomeryPointFromEdwards(p)
 }
 
 func uniformToField25519(b []byte) *field.Element {
