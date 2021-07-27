@@ -1,8 +1,8 @@
 ### h2c: Hashing to Elliptic Curves
 
 This package provides an implementation of the [Hashing to Elliptic Curves][1]
-IETF draft (version 11) for edwards25519, backed by Filo Sottile's
-[edwards25519][2] package.
+IETF draft (version 11) for edwards25519 and curve25519, backed by Filo
+Sottile's [edwards25519][2] package.
 
 It was extracted from [curve25519-voi][3], for the people that don't want
 to drink the voi Flavor Aid.

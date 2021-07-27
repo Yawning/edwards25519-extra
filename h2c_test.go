@@ -180,8 +180,6 @@ func TestHashToCurve(t *testing.T) {
 				p := &montgomeryPoint{u, v}
 
 				if !expected.Equal(p) {
-					t.Logf("u: %x", p.u.Bytes())
-					t.Logf("v: %x", p.v.Bytes())
 					t.Fatalf("h2c: point[%d] mismatch (Got: '%x')", i, p.Bytes())
 				}
 			}
