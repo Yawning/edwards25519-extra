@@ -28,9 +28,9 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Package ecvrf implements the "Verifiable Random Functions (VRFs)"
+// Package vrf implements the "Verifiable Random Functions (VRFs)"
 // IETF draft, providing the ECVRF-EDWARDS25519-SHA512-ELL2 suite.
-package ecvrf
+package vrf
 
 import (
 	"bytes"
