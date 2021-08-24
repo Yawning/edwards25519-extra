@@ -1,4 +1,4 @@
-module gitlab.com/yawning/h2c.git
+module gitlab.com/yawning/edwards25519-extra.git
 
 go 1.16
 
