@@ -298,7 +298,11 @@ func decodeProof(piString []byte) (*edwards25519.Point, *edwards25519.Scalar, *e
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("ecvrf: failed to deserialize s scalar: %w", err)
 	}
+	// 8.  if s >= q output "INVALID" and stop
+	if subtle.ConstantTimeCompare(s.Bytes(), piString[48:]) != 1 {
+		return nil, nil, nil, fmt.Errorf("ecvrf: non-canonical s scalar")
+	}
 
-	// 8.  Output Gamma, c, and s
+	// 9.  Output Gamma, c, and s
 	return gamma, c, s, nil
 }
