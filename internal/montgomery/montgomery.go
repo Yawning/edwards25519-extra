@@ -28,7 +28,9 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package h2c
+// Package montgomery provides helper routines for dealing with curve25519
+// montgomery points.
+package montgomery
 
 import (
 	"encoding/binary"
@@ -38,34 +40,34 @@ import (
 )
 
 var (
-	constZero = new(field.Element).Zero()
-	constOne  = new(field.Element).One()
-	constTwo  = new(field.Element).Add(constOne, constOne)
+	ZERO = new(field.Element).Zero()
+	ONE  = new(field.Element).One()
+	TWO  = new(field.Element).Add(ONE, ONE)
 
-	constMONTGOMERY_A         = mustFeFromUint64(486662)
-	constMONTGOMERY_A_SQUARED = mustFeFromUint64(486662 * 486662)
+	A         = mustFeFromUint64(486662)
+	A_SQUARED = mustFeFromUint64(486662 * 486662)
 
-	constSQRT_M1 = mustFeFromBytes([]byte{
+	SQRT_M1 = mustFeFromBytes([]byte{
 		0xb0, 0xa0, 0x0e, 0x4a, 0x27, 0x1b, 0xee, 0xc4, 0x78, 0xe4, 0x2f, 0xad, 0x06, 0x18, 0x43, 0x2f,
 		0xa7, 0xd7, 0xfb, 0x3d, 0x99, 0x00, 0x4d, 0x2b, 0x0b, 0xdf, 0xc1, 0x4f, 0x80, 0x24, 0x83, 0x2b,
 	})
 
-	constMONTGOMERY_NEG_A = mustFeFromBytes([]byte{
+	NEG_A = mustFeFromBytes([]byte{
 		0xe7, 0x92, 0xf8, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
 	})
 
-	constMONTGOMERY_SQRT_NEG_A_PLUS_TWO = mustFeFromBytes([]byte{
+	SQRT_NEG_A_PLUS_TWO = mustFeFromBytes([]byte{
 		0x06, 0x7e, 0x45, 0xff, 0xaa, 0x04, 0x6e, 0xcc, 0x82, 0x1a, 0x7d, 0x4b, 0xd1, 0xd3, 0xa1, 0xc5,
 		0x7e, 0x4f, 0xfc, 0x03, 0xdc, 0x08, 0x7b, 0xd2, 0xbb, 0x06, 0xa0, 0x60, 0xf4, 0xed, 0x26, 0x0f,
 	})
 
-	constMONTGOMERY_U_FACTOR = mustFeFromBytes([]byte{
+	U_FACTOR = mustFeFromBytes([]byte{
 		0x8d, 0xbe, 0xe2, 0x6b, 0xb1, 0xc9, 0x23, 0x76, 0x0e, 0x37, 0xa0, 0xa5, 0xf2, 0xcf, 0x79, 0xa1,
 		0xb1, 0x50, 0x08, 0x84, 0xcd, 0xfe, 0x65, 0xa9, 0xe9, 0x41, 0x7c, 0x60, 0xff, 0xb6, 0xf9, 0x28,
 	})
 
-	constMONTGOMERY_V_FACTOR = mustFeFromBytes([]byte{
+	V_FACTOR = mustFeFromBytes([]byte{
 		0x3e, 0x5f, 0xf1, 0xb5, 0xd8, 0xe4, 0x11, 0x3b, 0x87, 0x1b, 0xd0, 0x52, 0xf9, 0xe7, 0xbc, 0xd0,
 		0x58, 0x28, 0x04, 0xc2, 0x66, 0xff, 0xb2, 0xd4, 0xf4, 0x20, 0x3e, 0xb0, 0x7f, 0xdb, 0x7c, 0x54,
 	})
@@ -86,10 +88,64 @@ func mustFeFromUint64(x uint64) *field.Element {
 }
 
 func feIsZero(fe *field.Element) int {
-	return fe.Equal(constZero)
+	return fe.Equal(ZERO)
 }
 
-func newEdwardsFromXY(x, y *field.Element) *edwards25519.Point {
+func FromEdwardsPoint(p *edwards25519.Point) (*field.Element, *field.Element) {
+	xExt, yExt, zExt, _ := p.ExtendedCoordinates()
+
+	// Convert from extended (x, y, z, t) coordiantes to x, y.
+	zInv := new(field.Element).Invert(zExt)
+	x := new(field.Element).Multiply(xExt, zInv)
+	y := new(field.Element).Multiply(yExt, zInv)
+
+	// Per RFC 7748: (u, v) = ((1+y)/(1-y), sqrt(-486664)*u/x)
+
+	onePlusY := new(field.Element).Add(ONE, y)
+	oneMinusY := new(field.Element).Subtract(ONE, y)
+	u := new(field.Element).Invert(oneMinusY)
+	u.Multiply(onePlusY, u)
+
+	v := new(field.Element).Invert(x)
+	v.Multiply(v, SQRT_NEG_A_PLUS_TWO)
+	v.Multiply(v, u)
+
+	// If y == 1, 1/(1-y) = 0, (u, v) = (0, 0) (No adjustment needed)
+	// If x == 0, sqrt(-486664)*u/x = 0, (u, v) = (u, 0)
+	u.Select(ZERO, u, feIsZero(x))
+
+	return u, v
+}
+
+func ToEdwardsPoint(u, v *field.Element) *edwards25519.Point {
+	// Per RFC 7748: (x, y) = (sqrt(-486664)*u/v, (u-1)/(u+1))
+
+	x := new(field.Element).Invert(v)
+	x.Multiply(x, u)
+	x.Multiply(x, SQRT_NEG_A_PLUS_TWO)
+
+	uMinusOne := new(field.Element).Subtract(u, ONE)
+	uPlusOne := new(field.Element).Add(u, ONE)
+	uPlusOneIsZero := feIsZero(uPlusOne)
+
+	uPlusOne.Invert(uPlusOne)
+	y := new(field.Element).Multiply(uMinusOne, uPlusOne)
+
+	// This mapping is undefined when t == 0 or s == -1, i.e., when the
+	// denominator of either of the above rational functions is zero.
+	// Implementations MUST detect exceptional cases and return the value
+	// (v, w) = (0, 1), which is the identity point on all twisted Edwards
+	// curves.
+	resultUndefined := feIsZero(v) | uPlusOneIsZero
+	x.Select(ZERO, x, resultUndefined)
+	y.Select(ONE, y, resultUndefined)
+
+	// Convert from Edwards (x, y) to extended (x, y, z, t) coordinates.
+	return NewEdwardsFromXY(x, y)
+}
+
+func NewEdwardsFromXY(x, y *field.Element) *edwards25519.Point {
+	// Yeah yeah yeah, no where better to put this. :(
 	Z := new(field.Element).One()
 	T := new(field.Element).Multiply(x, y)
 
@@ -98,66 +154,4 @@ func newEdwardsFromXY(x, y *field.Element) *edwards25519.Point {
 		panic("h2c: failed to create edwards point from x, y: " + err.Error())
 	}
 	return p
-}
-
-func ell2EdwardsFlavor(r *field.Element) *edwards25519.Point {
-	return ell2MontgomeryFlavor(r).ToEdwardsPoint()
-}
-
-func ell2MontgomeryFlavor(r *field.Element) *montgomeryPoint {
-	// This is based off the public domain python implementation by
-	// Loup Vaillant, taken from the Monocypher package
-	// (tests/gen/elligator.py).
-	//
-	// The choice of base implementation is primarily because it was
-	// convenient, and because they appear to be one of the people
-	// that have given the most thought regarding how to implement
-	// this correctly, with a readable implementation that I can
-	// wrap my brain around.
-
-	// r1
-	t1 := new(field.Element).Square(r)
-	t1.Multiply(t1, constTwo)
-
-	// r2
-	u := new(field.Element).Add(t1, constOne)
-
-	t2 := new(field.Element).Square(u)
-
-	// numerator
-	t3 := new(field.Element).Multiply(constMONTGOMERY_A_SQUARED, t1)
-	t3.Subtract(t3, t2)
-	t3.Multiply(t3, constMONTGOMERY_A)
-
-	// denominator
-	t1.Multiply(t2, u)
-
-	t1.Multiply(t1, t3)
-	_, isSquare := t1.SqrtRatio(constOne, t1)
-
-	u.Square(r)
-	u.Multiply(u, constMONTGOMERY_U_FACTOR)
-
-	v := new(field.Element).Multiply(r, constMONTGOMERY_V_FACTOR)
-
-	u.Select(constOne, u, isSquare)
-	v.Select(constOne, v, isSquare)
-
-	v.Multiply(v, t3)
-	v.Multiply(v, t1)
-
-	t1.Square(t1)
-
-	u.Multiply(u, constMONTGOMERY_NEG_A)
-	u.Multiply(u, t3)
-	u.Multiply(u, t2)
-	u.Multiply(u, t1)
-
-	negV := new(field.Element).Negate(v)
-	v.Select(negV, v, isSquare^v.IsNegative())
-
-	return &montgomeryPoint{
-		u: u,
-		v: v,
-	}
 }

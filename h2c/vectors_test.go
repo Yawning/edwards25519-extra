@@ -36,6 +36,7 @@ import (
 	"crypto"
 	_ "crypto/sha256"
 	_ "crypto/sha512"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -46,15 +47,9 @@ import (
 
 	"filippo.io/edwards25519"
 	"filippo.io/edwards25519/field"
+
+	"gitlab.com/yawning/edwards25519-extra.git/internal/montgomery"
 )
-
-func (v *montgomeryPoint) Equal(other *montgomeryPoint) bool {
-	return v.u.Equal(other.u) == 1 && v.v.Equal(other.v) == 1
-}
-
-func (v *montgomeryPoint) Bytes() []byte {
-	return v.u.Bytes()
-}
 
 type suiteTestDef struct {
 	n    string
@@ -176,12 +171,12 @@ func (pt *suiteTestPoint) ToEdwardsPoint(t *testing.T) (*edwards25519.Point, err
 	if err != nil {
 		return nil, err
 	}
-	return newEdwardsFromXY(feX, feY), nil
+	return montgomery.NewEdwardsFromXY(feX, feY), nil
 }
 
-func (pt *suiteTestPoint) ToMontgomeryPoint(t *testing.T) (*montgomeryPoint, error) {
-	feX, feY, err := pt.ToCoordinates(t)
-	return &montgomeryPoint{feX, feY}, err
+func (pt *suiteTestPoint) ToMontgomeryPoint(t *testing.T) (*field.Element, *field.Element, error) {
+	feU, feV, err := pt.ToCoordinates(t)
+	return feU, feV, err
 }
 
 func testSuite(t *testing.T, def *suiteTestDef) {
@@ -221,7 +216,7 @@ func testSuite(t *testing.T, def *suiteTestDef) {
 					t.Fatalf("h2c: point mismatch (Got: '%x')", p.Bytes())
 				}
 			case def.fn2 != nil:
-				expectedP, err := vec.P.ToMontgomeryPoint(t)
+				expectedU, expectedV, err := vec.P.ToMontgomeryPoint(t)
 				if err != nil {
 					t.Fatalf("failed to deserialized result: %v", err)
 				}
@@ -230,10 +225,12 @@ func testSuite(t *testing.T, def *suiteTestDef) {
 				if err != nil {
 					t.Fatalf("hash to curve failed: %v", err)
 				}
-				p := &montgomeryPoint{u, v}
 
-				if !expectedP.Equal(p) {
-					t.Fatalf("h2c: point mismatch (Got: '%x')", p.Bytes())
+				if expectedU.Equal(u) != 1 {
+					t.Fatalf("h2c: point u-cooredinate mismatch (Got: '%x')", u.Bytes())
+				}
+				if expectedV.Equal(v) != 1 {
+					t.Fatalf("h2c: point v-cooredinate mismatch (Got: '%x')", v.Bytes())
 				}
 			default:
 				t.Fatalf("h2c: no suite function defined")
@@ -298,4 +295,13 @@ func testExpand(t *testing.T, def *expandTestDef) {
 
 func trimOhEcks(s string) string {
 	return strings.TrimPrefix(s, "0x")
+}
+
+func mustUnhex(t *testing.T, x string) []byte {
+	b, err := hex.DecodeString(strings.ReplaceAll(x, " ", ""))
+	if err != nil {
+		t.Fatalf("failed to parse hex: %v", err)
+	}
+
+	return b
 }
