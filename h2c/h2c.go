@@ -39,6 +39,9 @@ import (
 	"filippo.io/edwards25519"
 	"filippo.io/edwards25519/field"
 	"golang.org/x/crypto/sha3"
+
+	"gitlab.com/yawning/edwards25519-extra.git/elligator2"
+	"gitlab.com/yawning/edwards25519-extra.git/internal/montgomery"
 )
 
 const (
@@ -120,8 +123,8 @@ func Curve25519_XMD_ELL2_RO(hFunc crypto.Hash, domainSeparator, message []byte) 
 	if err := ExpandMessageXMD(uniformBytes[:], hFunc, domainSeparator, message); err != nil {
 		return nil, nil, fmt.Errorf("h2c: failed to expand message: %w", err)
 	}
-	p := hashToCurveMontgomery(&uniformBytes)
-	return p.u, p.v, nil
+	u, v := hashToCurveMontgomery(&uniformBytes)
+	return u, v, nil
 }
 
 // Curve25519_XMD_ELL2_NU implements a generic curve25519 nonuniform suite
@@ -131,8 +134,8 @@ func Curve25519_XMD_ELL2_NU(hFunc crypto.Hash, domainSeparator, message []byte) 
 	if err := ExpandMessageXMD(uniformBytes[:], hFunc, domainSeparator, message); err != nil {
 		return nil, nil, fmt.Errorf("h2c: failed to expand message: %w", err)
 	}
-	p := encodeToCurveMontgomery(&uniformBytes)
-	return p.u, p.v, nil
+	u, v := encodeToCurveMontgomery(&uniformBytes)
+	return u, v, nil
 }
 
 // Curve25519_XOF_ELL2_RO implements a generic curve25519 random oracle suite
@@ -142,8 +145,8 @@ func Curve25519_XOF_ELL2_RO(xofFunc sha3.ShakeHash, domainSeparator, message []b
 	if err := ExpandMessageXOF(uniformBytes[:], xofFunc, domainSeparator, message); err != nil {
 		return nil, nil, fmt.Errorf("h2c: failed to expand message: %w", err)
 	}
-	p := hashToCurveMontgomery(&uniformBytes)
-	return p.u, p.v, nil
+	u, v := hashToCurveMontgomery(&uniformBytes)
+	return u, v, nil
 }
 
 // Curve5519_XOF_ELL2_NU implements a generic curve25519 nonuniform suite
@@ -153,16 +156,16 @@ func Curve25519_XOF_ELL2_NU(xofFunc sha3.ShakeHash, domainSeparator, message []b
 	if err := ExpandMessageXOF(uniformBytes[:], xofFunc, domainSeparator, message); err != nil {
 		return nil, nil, fmt.Errorf("h2c: failed to expand message: %w", err)
 	}
-	p := encodeToCurveMontgomery(&uniformBytes)
-	return p.u, p.v, nil
+	u, v := encodeToCurveMontgomery(&uniformBytes)
+	return u, v, nil
 }
 
 func hashToCurveEdwards(uniformBytes *[hashToCurveSize]byte) *edwards25519.Point {
 	fe0 := uniformToField25519(uniformBytes[:ell])
 	fe1 := uniformToField25519(uniformBytes[ell:])
 
-	Q0 := ell2EdwardsFlavor(fe0)
-	Q1 := ell2EdwardsFlavor(fe1)
+	Q0 := elligator2.EdwardsFlavor(fe0)
+	Q1 := elligator2.EdwardsFlavor(fe1)
 
 	p := new(edwards25519.Point).Add(Q0, Q1)
 	return p.MultByCofactor(p)
@@ -171,19 +174,19 @@ func hashToCurveEdwards(uniformBytes *[hashToCurveSize]byte) *edwards25519.Point
 func encodeToCurveEdwards(uniformBytes *[encodeToCurveSize]byte) *edwards25519.Point {
 	fe := uniformToField25519(uniformBytes[:])
 
-	Q := ell2EdwardsFlavor(fe)
+	Q := elligator2.EdwardsFlavor(fe)
 
 	return new(edwards25519.Point).MultByCofactor(Q)
 }
 
-func hashToCurveMontgomery(uniformBytes *[hashToCurveSize]byte) *montgomeryPoint {
+func hashToCurveMontgomery(uniformBytes *[hashToCurveSize]byte) (*field.Element, *field.Element) {
 	p := hashToCurveEdwards(uniformBytes)
-	return newMontgomeryPointFromEdwards(p)
+	return montgomery.FromEdwardsPoint(p)
 }
 
-func encodeToCurveMontgomery(uniformBytes *[encodeToCurveSize]byte) *montgomeryPoint {
+func encodeToCurveMontgomery(uniformBytes *[encodeToCurveSize]byte) (*field.Element, *field.Element) {
 	p := encodeToCurveEdwards(uniformBytes)
-	return newMontgomeryPointFromEdwards(p)
+	return montgomery.FromEdwardsPoint(p)
 }
 
 func uniformToField25519(b []byte) *field.Element {

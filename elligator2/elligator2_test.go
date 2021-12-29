@@ -28,7 +28,7 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package h2c
+package elligator2
 
 import (
 	"encoding/hex"
@@ -44,64 +44,22 @@ const (
 	montgomeryPointSize   = 32
 )
 
-func (v *montgomeryPoint) EqualU(otherU *field.Element) bool {
-	return v.u.Equal(otherU) == 1
-}
-
-func montgomeryFromUniformBytes(in []byte) (*montgomeryPoint, error) {
+func montgomeryFromUniformBytes(in []byte) (*field.Element, *field.Element, error) {
 	if len(in) != montgomeryUniformSize {
-		return nil, fmt.Errorf("curve/montgomery: unexpected representative size")
+		return nil, nil, fmt.Errorf("curve/montgomery: unexpected representative size")
 	}
 
 	var r field.Element
 	if _, err := r.SetBytes(in[:]); err != nil {
-		return nil, fmt.Errorf("curve/montgomery: failed to deserailize r: %w", err)
+		return nil, nil, fmt.Errorf("curve/montgomery: failed to deserailize r: %w", err)
 	}
 
-	return ell2MontgomeryFlavor(&r), nil
+	u, v := MontgomeryFlavor(&r)
+	return u, v, nil
 }
 
 func TestElligator2(t *testing.T) {
-	t.Run("Constants", testElligator2Constants)
 	t.Run("Montgomery", testElligator2Montgomery)
-}
-
-func testElligator2Constants(t *testing.T) {
-	t.Run("NegA", func(t *testing.T) {
-		expected := new(field.Element).Negate(constMONTGOMERY_NEG_A)
-
-		if expected.Equal(constMONTGOMERY_A) != 1 {
-			t.Fatalf("invalid value for -A: %x", constMONTGOMERY_NEG_A.Bytes())
-		}
-	})
-
-	t.Run("SqrtNegAPlusTwo", func(t *testing.T) {
-		expected := new(field.Element).Subtract(constMONTGOMERY_NEG_A, constTwo)
-		expected.Invert(expected)
-		expected.SqrtRatio(constOne, expected)
-
-		if expected.Equal(constMONTGOMERY_SQRT_NEG_A_PLUS_TWO) != 1 {
-			t.Fatalf("invalid value for sqrt(-(A+2): %x", constMONTGOMERY_SQRT_NEG_A_PLUS_TWO.Bytes())
-		}
-	})
-
-	t.Run("UFactor", func(t *testing.T) {
-		expected := new(field.Element).Negate(constTwo)
-		expected.Multiply(expected, constSQRT_M1)
-
-		if expected.Equal(constMONTGOMERY_U_FACTOR) != 1 {
-			t.Fatalf("invalid value for u_factor: %x", constMONTGOMERY_U_FACTOR.Bytes())
-		}
-	})
-
-	t.Run("VFactor", func(t *testing.T) {
-		expected := new(field.Element).Invert(constMONTGOMERY_U_FACTOR)
-		expected.SqrtRatio(constOne, expected)
-
-		if expected.Equal(constMONTGOMERY_V_FACTOR) != 1 {
-			t.Fatalf("invalid value for v_factor: %x", constMONTGOMERY_V_FACTOR.Bytes())
-		}
-	})
 }
 
 func testElligator2Montgomery(t *testing.T) {
@@ -175,12 +133,12 @@ func testElligator2Montgomery(t *testing.T) {
 		copy(clamped[:], v.repr)
 		clamped[31] &= 63
 
-		p, err := montgomeryFromUniformBytes(clamped[:])
+		u, _, err := montgomeryFromUniformBytes(clamped[:])
 		if err != nil {
 			t.Fatalf("p.SetUniformBytes(v[%d].repr): %v", i, err)
 		}
-		if !p.EqualU(v.expected) {
-			t.Fatalf("p[%d] != vector[%d] (Got: %v)", i, i, p)
+		if u.Equal(v.expected) != 1 {
+			t.Fatalf("p[%d] != vector[%d] (Got: %v)", i, i, u)
 		}
 	}
 }
