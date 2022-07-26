@@ -5,8 +5,8 @@ curve25519 implementations, primarily extracted from [curve25519-voi][1].
 This package is intended for interoperability with the standard library
 and the [edwards25519][2] package as much as possible.
 
- * h2c: [Hashing to Elliptic Curves (version 13)][3]
- * vrf: [Verifiable Random Functions (version 10)][4]
+ * h2c: [Hashing to Elliptic Curves (version 16)][3]
+ * vrf: [Verifiable Random Functions (version 10, 13)][4]
 
 Note: It is the author's biased opinion that using curve25519-voi is
 objectively superior to using the standard library along with this
