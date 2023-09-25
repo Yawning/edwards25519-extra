@@ -28,8 +28,8 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Package vrf implements the "Verifiable Random Functions (VRFs)"
-// IETF draft, providing the ECVRF-EDWARDS25519-SHA512-ELL2 suite.
+// Package vrf implements "Verifiable Random Functions (VRFs)" as specified
+// in RFC 9381, providing the ECVRF-EDWARDS25519-SHA512-ELL2 suite.
 package vrf
 
 import (
@@ -69,7 +69,7 @@ func Prove(sk ed25519.PrivateKey, alphaString []byte) []byte {
 	return doProve(sk, alphaString, false)
 }
 
-// Prove_v10 is Prove but using the v10 (and earlier) semantics.
+// Prove_v10 is Prove but using the draft v7 to v10 semantics.
 func Prove_v10(sk ed25519.PrivateKey, alphaString []byte) []byte {
 	return doProve(sk, alphaString, true)
 }
@@ -183,7 +183,7 @@ func Verify(pk ed25519.PublicKey, piString, alphaString []byte) (bool, []byte) {
 	return doVerify(pk, piString, alphaString, false)
 }
 
-// Verify_v10 is Verify but using the v10 (and earlier) semantics.
+// Verify_v10 is Verify but using the draft v7 to v10 semantics.
 func Verify_v10(pk ed25519.PublicKey, piString, alphaString []byte) (bool, []byte) {
 	return doVerify(pk, piString, alphaString, true)
 }
