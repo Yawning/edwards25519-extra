@@ -58,7 +58,7 @@ func ExpandMessageXMD(out []byte, hFunc crypto.Hash, domainSeparator, message []
 		return fmt.Errorf("h2c: len_in_bytes out of range: %d", lenInBytes)
 	}
 
-	// 5.4.3 Using DSTs longer than 255 bytes.
+	// 5.3.3 Using DSTs longer than 255 bytes.
 	DST := domainSeparator
 	lenDST := len(domainSeparator)
 	if lenDST > math.MaxUint8 {

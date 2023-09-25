@@ -28,7 +28,7 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Package h2c implements the "Hashing to Elliptic Curves" IETF draft.
+// Package h2c implements Hashing to Elliptic Curves as specified in RFC 9380.
 package h2c
 
 import (
