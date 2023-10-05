@@ -48,7 +48,7 @@ import (
 	"filippo.io/edwards25519"
 	"filippo.io/edwards25519/field"
 
-	"gitlab.com/yawning/edwards25519-extra.git/internal/montgomery"
+	"gitlab.com/yawning/edwards25519-extra/internal/montgomery"
 )
 
 type suiteTestDef struct {

@@ -40,7 +40,7 @@ import (
 	"fmt"
 
 	"filippo.io/edwards25519"
-	"gitlab.com/yawning/edwards25519-extra.git/h2c"
+	"gitlab.com/yawning/edwards25519-extra/h2c"
 )
 
 const (

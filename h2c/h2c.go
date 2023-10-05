@@ -40,8 +40,8 @@ import (
 	"filippo.io/edwards25519/field"
 	"golang.org/x/crypto/sha3"
 
-	"gitlab.com/yawning/edwards25519-extra.git/elligator2"
-	"gitlab.com/yawning/edwards25519-extra.git/internal/montgomery"
+	"gitlab.com/yawning/edwards25519-extra/elligator2"
+	"gitlab.com/yawning/edwards25519-extra/internal/montgomery"
 )
 
 const (
