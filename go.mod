@@ -1,4 +1,4 @@
-module gitlab.com/yawning/edwards25519-extra.git
+module gitlab.com/yawning/edwards25519-extra
 
 go 1.16
 
